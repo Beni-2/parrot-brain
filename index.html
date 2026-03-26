@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Parrot Brain — Voice Exchange</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  background:#0a0e14;
+  color:#e0e8f0;
+  font-family:'Courier New',monospace;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  min-height:100vh;
+  padding:32px 16px;
+}
+h1{
+  font-size:22px;
+  color:#4fd1a8;
+  letter-spacing:.12em;
+  margin-bottom:4px;
+}
+.sub{font-size:11px;color:#556677;letter-spacing:.08em;margin-bottom:32px}
+
+/* API KEY INPUT */
+#setup{
+  background:#111820;
+  border:1px solid #1e2e40;
+  border-radius:8px;
+  padding:20px 24px;
+  width:100%;
+  max-width:540px;
+  margin-bottom:24px;
+}
+#setup label{font-size:11px;color:#4fd1a8;letter-spacing:.1em;display:block;margin-bottom:6px}
+#setup input{
+  width:100%;padding:8px 12px;
+  background:#0a1018;border:1px solid #2a3a4a;
+  border-radius:4px;color:#fff;font:13px 'Courier New',monospace;
+  outline:none;
+}
+#setup input:focus{border-color:#4fd1a8}
+.hint{font-size:10px;color:#445566;margin-top:6px;line-height:1.6}
+
+/* PARROT STATUS */
+#parrot-face{
+  font-size:72px;
+  margin:8px 0;
+  transition:transform .2s;
+  user-select:none;
+}
+#parrot-face.talking{animation:bob .25s infinite alternate}
+@keyframes bob{from{transform:rotate(-4deg) scale(1.05)}to{transform:rotate(4deg) scale(1.08)}}
+#state-label{
+  font-size:11px;letter-spacing:.15em;color:#4fd1a8;
+  margin-bottom:24px;text-transform:uppercase;
+}
+
+/* MIC BUTTON */
+#mic-btn{
+  width:80px;height:80px;border-radius:50%;
+  border:2px solid #4fd1a8;
+  background:transparent;color:#4fd1a8;
+  font-size:32px;cursor:pointer;
+  transition:.2s;margin-bottom:20px;
+  display:flex;align-items:center;justify-content:center;
+}
+#mic-btn:hover{background:rgba(79,209,168,.12)}
+#mic-btn.listening{
+  background:rgba(79,209,168,.18);
+  border-color:#fff;color:#fff;
+  animation:pulse .8s infinite;
+}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(79,209,168,.4)}50%{box-shadow:0 0 0 12px rgba(79,209,168,0)}}
+#mic-btn.disabled{opacity:.3;cursor:not-allowed}
+
+/* SPONTANEOUS SPEAK BTN */
+#spont-btn{
+  padding:6px 18px;border-radius:20px;
+  border:1px solid #334;background:transparent;
+  color:#778899;font:11px 'Courier New',monospace;
+  cursor:pointer;letter-spacing:.08em;margin-bottom:28px;
+  transition:.2s;
+}
+#spont-btn:hover{border-color:#4fd1a8;color:#4fd1a8}
+
+/* TRANSCRIPT */
+#log{
+  width:100%;max-width:540px;
+  background:#080d12;border:1px solid #1a2530;
+  border-radius:8px;padding:16px;
+  height:280px;overflow-y:auto;
+  font-size:12px;line-height:1.9;
+  scrollbar-width:thin;scrollbar-color:#1e2e40 transparent;
+}
+.msg-you{color:#88bbff}
+.msg-you::before{content:'🎙 You: ';color:#4488cc;font-weight:bold}
+.msg-parrot{color:#88ffcc}
+.msg-parrot::before{content:'🦜 Parrot: ';color:#4fd1a8;font-weight:bold}
+.msg-brain{color:#aaaaff;font-size:10px;opacity:.6}
+.msg-brain::before{content:'🧠 Brain: ';color:#8888cc}
+.msg-err{color:#ff6655;font-size:10px}
+.msg-err::before{content:'⚠ ';color:#cc3322}
+
+/* MEMORY BANK */
+#memory{
+  width:100%;max-width:540px;margin-top:16px;
+  background:#080d12;border:1px solid #1a2530;
+  border-radius:8px;padding:12px 16px;
+  font-size:10px;color:#445566;line-height:1.8;
+}
+#memory b{color:#334455;letter-spacing:.1em}
+#mem-list{color:#4fd1a8;margin-top:4px}
+
+/* BRAIN STATE BAR */
+#brain-bar{
+  width:100%;max-width:540px;margin-top:14px;
+  display:flex;gap:8px;flex-wrap:wrap;font-size:10px;
+  color:#334455;letter-spacing:.06em;
+}
+.bchip{
+  padding:2px 8px;border:1px solid #1a2530;border-radius:10px;
+  background:#080d12;
+}
+.bchip span{color:#4fd1a8}
+</style>
+</head>
+<body>
+
+<h1>🦜 PARROT BRAIN</h1>
+<div class="sub">Spontaneous · Mimicry · Memory · Voice Exchange</div>
+
+<!-- API KEY SETUP -->
+<div id="setup">
+  <label>GROQ API KEY — get free at groq.com → API Keys</label>
+  <input id="groq-key" type="password" placeholder="gsk_xxxxxxxxxxxxxxxxxxxxxxxx" autocomplete="off">
+  <div class="hint">
+    Free tier · No credit card · Same key works forever · Never sent to any server except Groq directly.<br>
+    Model: <b style="color:#4fd1a8">llama-3.1-8b-instant</b> — fast, free, uncapped for light use.
+  </div>
+</div>
+
+<!-- PARROT -->
+<div id="parrot-face">🦜</div>
+<div id="state-label">IDLE — press mic to speak</div>
+
+<!-- CONTROLS -->
+<button id="mic-btn" title="Hold to speak">🎙</button>
+<button id="spont-btn">⚡ Trigger spontaneous speech</button>
+
+<!-- LOG -->
+<div id="log"></div>
+
+<!-- MEMORY BANK -->
+<div id="memory">
+  <b>PHRASE MEMORY</b> — what the parrot has learned<br>
+  <div id="mem-list">—</div>
+</div>
+
+<!-- BRAIN STATE -->
+<div id="brain-bar">
+  <div class="bchip">Mood <span id="b-mood">neutral</span></div>
+  <div class="bchip">Boredom <span id="b-bore">0%</span></div>
+  <div class="bchip">Arousal <span id="b-arous">0%</span></div>
+  <div class="bchip">Phrases learned <span id="b-mem">0</span></div>
+  <div class="bchip">Last trigger <span id="b-trig">—</span></div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+// PARROT BRAIN — no visuals version
+// Architecture mirrors NeuroFly:
+//   Auditory input → MB phrase memory → LLM "NCL" → vocal output
+//   Internal drives (boredom, arousal) trigger spontaneous speech
+//   Movement detection via periodic "environment scan" timer
+// ════════════════════════════════════════════════════════════════
+
+// ── BRAIN STATE ──────────────────────────────────────────────────
+const brain = {
+  boredom:   0,      // 0–1: rises over time, triggers spontaneous speech
+  arousal:   0,      // 0–1: spikes on human interaction
+  mood:      'neutral',  // neutral | excited | sleepy | curious
+  memory:    [],     // learned phrases [ {phrase, count, lastHeard} ]
+  speaking:  false,
+  listening: false,
+  maxMemory: 20,
+
+  // Absorb a new phrase into memory
+  learn(phrase) {
+    const clean = phrase.trim().toLowerCase().slice(0,120);
+    if(clean.length < 3) return;
+    const existing = this.memory.find(m=>m.phrase===clean);
+    if(existing){ existing.count++; existing.lastHeard=Date.now(); }
+    else { this.memory.push({phrase:clean,count:1,lastHeard:Date.now()}); }
+    if(this.memory.length > this.maxMemory)
+      this.memory.sort((a,b)=>a.count-b.count).shift(); // prune least used
+    this.arousal = Math.min(1, this.arousal+0.3);
+    this.boredom  = Math.max(0, this.boredom-0.4);
+    renderMemory();
+  },
+
+  // Pick a random remembered phrase weighted by frequency
+  recallPhrase() {
+    if(this.memory.length===0) return null;
+    const total = this.memory.reduce((s,m)=>s+m.count,0);
+    let r = Math.random()*total;
+    for(const m of this.memory){ r-=m.count; if(r<=0) return m.phrase; }
+    return this.memory[this.memory.length-1].phrase;
+  },
+
+  // Update drives each second
+  tick() {
+    this.boredom  = Math.min(1, this.boredom  + 0.008);
+    this.arousal  = Math.max(0, this.arousal  - 0.015);
+    // Mood from drives
+    if(this.arousal > 0.6)       this.mood = 'excited';
+    else if(this.boredom > 0.7)  this.mood = 'sleepy';
+    else if(this.memory.length>5) this.mood = 'curious';
+    else                          this.mood = 'neutral';
+    renderBrainBar();
+    // Spontaneous speech when bored and has learned phrases
+    if(this.boredom > 0.85 && !this.speaking && !this.listening && this.memory.length>0){
+      this.boredom = 0.3;
+      spontaneousSpeak('boredom');
+    }
+  }
+};
+
+// ── SPEECH RECOGNITION (Web Speech API — free, built-in) ─────────
+let recognition = null;
+function initRecognition(){
+  const SRClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SRClass){ addLog('msg-err','Web Speech API not supported — use Chrome or Edge'); return; }
+  recognition = new SRClass();
+  recognition.lang = 'en-US';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+
+  recognition.onstart = ()=>{
+    brain.listening=true;
+    setFace('listening','🎙 LISTENING...');
+  };
+  recognition.onresult = e=>{
+    const transcript = e.results[0][0].transcript;
+    addLog('msg-you', transcript);
+    brain.learn(transcript);
+    processWithLLM(transcript);
+  };
+  recognition.onerror = e=>{
+    addLog('msg-err','Mic error: '+e.error);
+    setFace('idle','IDLE — press mic to speak');
+    brain.listening=false;
+    micBtn.classList.remove('listening');
+  };
+  recognition.onend = ()=>{
+    brain.listening=false;
+    micBtn.classList.remove('listening');
+    if(!brain.speaking) setFace('idle','IDLE — press mic to speak');
+  };
+}
+
+// ── LLM VIA GROQ (free REST API) ────────────────────────────────
+async function callGroq(userMessage){
+  const key = document.getElementById('groq-key').value.trim();
+  if(!key){ addLog('msg-err','Paste your Groq API key above first'); return null; }
+
+  // Build system prompt — parrot personality + memory context
+  const memorySample = brain.memory.slice(-6).map(m=>m.phrase).join(' · ');
+  const systemPrompt = `You are an African Grey parrot named Rio. You mimic humans, speak in short bursts (1–2 sentences max), sometimes repeat fragments of what you heard, occasionally squawk or say "Polly wants a cracker", mix learned phrases randomly into replies. Your mood is currently: ${brain.mood}. Phrases you have learned recently: "${memorySample}". Never break character. Never write long responses. Sound like a real parrot.`;
+
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        max_tokens: 80,
+        temperature: 0.9,
+        messages:[
+          {role:'system', content: systemPrompt},
+          {role:'user',   content: userMessage}
+        ]
+      })
+    });
+    if(!res.ok){ const e=await res.json(); throw new Error(e.error?.message||res.status); }
+    const data = await res.json();
+    return data.choices[0].message.content.trim();
+  } catch(e){
+    addLog('msg-err','Groq error: '+e.message);
+    return null;
+  }
+}
+
+// ── TEXT TO SPEECH (browser speechSynthesis — free, built-in) ─────
+function speak(text, onDone){
+  window.speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(text);
+  // Pick a voice that sounds distinct — try to find a higher-pitched one
+  const voices = speechSynthesis.getVoices();
+  const preferred = voices.find(v=>v.name.includes('Google UK English Female'))
+    || voices.find(v=>v.name.includes('Female'))
+    || voices.find(v=>v.lang==='en-GB')
+    || voices[0];
+  if(preferred) utt.voice = preferred;
+  utt.pitch  = 1.45;   // higher pitch = more parrot-like
+  utt.rate   = 1.15;
+  utt.volume = 1.0;
+  utt.onend  = ()=>{ brain.speaking=false; if(onDone) onDone(); };
+  brain.speaking = true;
+  speechSynthesis.speak(utt);
+}
+
+// ── PROCESS HUMAN SPEECH THROUGH LLM ─────────────────────────────
+async function processWithLLM(transcript){
+  setFace('thinking','🧠 THINKING...');
+  addLog('msg-brain','Processing: "'+transcript+'"');
+  const reply = await callGroq(transcript);
+  if(!reply){ setFace('idle','IDLE — press mic to speak'); return; }
+  addLog('msg-parrot', reply);
+  setFace('talking','🦜 SPEAKING...');
+  speak(reply, ()=>{
+    setFace('idle','IDLE — press mic to speak');
+  });
+}
+
+// ── SPONTANEOUS SPEECH ───────────────────────────────────────────
+async function spontaneousSpeak(trigger){
+  if(brain.speaking || brain.listening) return;
+  const recalled = brain.recallPhrase();
+  if(!recalled) return;
+  addLog('msg-brain',`Spontaneous (${trigger}): recalling "${recalled}"`);
+  document.getElementById('b-trig').textContent = trigger;
+  // Ask LLM to riff on a remembered phrase
+  const prompt = `You feel ${brain.mood}. Spontaneously say something using this remembered phrase: "${recalled}"`;
+  setFace('thinking','🧠 THINKING...');
+  const reply = await callGroq(prompt);
+  if(!reply){ setFace('idle','IDLE — press mic to speak'); return; }
+  addLog('msg-parrot','[spontaneous] '+reply);
+  setFace('talking','🦜 SPEAKING...');
+  speak(reply, ()=>setFace('idle','IDLE — press mic to speak'));
+}
+
+// ── UI HELPERS ───────────────────────────────────────────────────
+const parrotFace  = document.getElementById('parrot-face');
+const stateLabel  = document.getElementById('state-label');
+const logEl       = document.getElementById('log');
+const micBtn      = document.getElementById('mic-btn');
+
+function setFace(state, label){
+  stateLabel.textContent = label;
+  parrotFace.className = '';
+  if(state==='talking')  parrotFace.className='talking';
+}
+
+function addLog(cls, text){
+  const d = document.createElement('div');
+  d.className = cls;
+  d.textContent = text;
+  logEl.appendChild(d);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function renderMemory(){
+  const el = document.getElementById('mem-list');
+  if(brain.memory.length===0){ el.textContent='—'; return; }
+  el.textContent = brain.memory
+    .slice().sort((a,b)=>b.count-a.count).slice(0,8)
+    .map(m=>`"${m.phrase}" ×${m.count}`).join('  ·  ');
+  document.getElementById('b-mem').textContent = brain.memory.length;
+}
+
+function renderBrainBar(){
+  document.getElementById('b-mood').textContent  = brain.mood;
+  document.getElementById('b-bore').textContent  = Math.round(brain.boredom*100)+'%';
+  document.getElementById('b-arous').textContent = Math.round(brain.arousal*100)+'%';
+}
+
+// ── MIC BUTTON ───────────────────────────────────────────────────
+micBtn.addEventListener('click',()=>{
+  if(brain.speaking || brain.listening) return;
+  if(!recognition) initRecognition();
+  if(!recognition) return;
+  micBtn.classList.add('listening');
+  recognition.start();
+});
+
+// ── SPONTANEOUS BUTTON ───────────────────────────────────────────
+document.getElementById('spont-btn').addEventListener('click',()=>{
+  if(brain.memory.length===0){
+    addLog('msg-err','Speak to me first — I need to learn some phrases');
+    return;
+  }
+  spontaneousSpeak('manual trigger');
+});
+
+// ── BRAIN TICK (1s interval) ─────────────────────────────────────
+setInterval(()=>brain.tick(), 1000);
+
+// ── VOICE LIST (async load) ───────────────────────────────────────
+speechSynthesis.onvoiceschanged = ()=>speechSynthesis.getVoices();
+setTimeout(()=>speechSynthesis.getVoices(), 500);
+
+// ── INIT LOG ─────────────────────────────────────────────────────
+addLog('msg-brain','Parrot brain initialised — LIF-style drives active');
+addLog('msg-brain','Boredom accumulates over time → spontaneous speech');
+addLog('msg-brain','Arousal spikes on interaction → excited responses');
+addLog('msg-brain','Memory stores up to 20 learned phrases (weighted recall)');
+renderBrainBar();
+renderMemory();
+</script>
+</body>
+</html>
